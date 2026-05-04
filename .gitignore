@@ -1,0 +1,96 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*/_version.py
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# PyTorch Lightning
+lightning_logs
+
+# Experiment / personal directories
+molpal_PRMT1_*/
+PRMT1/
+tt/
+analysis/
+datanalysis/
+results/
+experiment4_*.md
+DMPN_IMPLEMENTATION_REPORT.md
+environment_working.yml
+environment_final.yml
+.vscode/
+.claude/
+
+# OS files
+.DS_Store
+*~
+
+# Model checkpoints
+*.pt
+*.ckpt
+
+# Oversized fingerprint caches (regeneratable from CSV)
+libraries/PRMT1_lib/*.h5
+
+# SLURM / job logs
+*.err
+*.out
+
+# Miscellaneous generated files
+scripts/distance.py
+analyze_test_loss.py
+fps_umap.py
+molpal_umap.py
+prep_glide_csv.py
+extract_smis.py
+config_local
