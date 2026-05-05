@@ -1,29 +1,77 @@
 # MolPAL: Molecular Pool-based Active Learning
-# Efficient Exploration of Virtual Chemical <br/> Libraries through Active Learning
 
-![overview of molpal structure and implementation](./assets/overview.png)
+**Fork with D-MPNN, MD-EI, Glide docking, and RTX 5090 support**
 
-## Overview
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-This repository contains the source of MolPAL, a software for the accelerated discovery of compounds in high-throughput virtual screening environments, as originally detailed in the paper [Accelerating high-throughput virtual screening through molecular pool-based active learning](https://pubs.rsc.org/en/content/articlelanding/2021/sc/d0sc06805e). The original code used in that paper lives at the [`publication`](https://github.com/coleygroup/molpal/releases/tag/publication) tag. This repository also contains the updated code used in the paper "Self-focusing virtual screening with active design space pruning," the code for which lives at the [`dsp-pub`](https://github.com/coleygroup/molpal/releases/tag/dsp-pub) tag. _To reproduce results from either publication, please see the [Reproducing Experimental Results](#reproducing-experimental-results) section_
+This is an enhanced fork of [coleygroup/molpal](https://github.com/coleygroup/molpal). The original is a software for accelerated discovery of compounds in high-throughput virtual screening environments, as detailed in [this paper](https://pubs.rsc.org/en/content/articlelanding/2021/sc/d0sc06805e).
 
-## Table of Contents
+---
 
-- [Overview](#overview)
-- [Table of Contents](#table-of-contents)
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [Running MolPAL](#running-molpal)
-  - [Setting up a ray cluster](#setting-up-a-ray-cluster)
-  - [Preprocessing](#preprocessing)
-  - [Configuration files](#configuration-files)
-  - [Examples](#examples)
-  - [Required Settings](#required-settings)
-  - [Optional Settings](#optional-settings)
-- [Reproducing Experimental Results](#reproducing-experimental-results)
-- [Object Model](#object-model)
-- [Future Directions](#future-directions)
-- [Citation](#citation)
+## What's New in This Fork
+
+### 🧪 D-MPNN Model (`--model dmpn`)
+Directed Message Passing Neural Network, an improvement over standard MPNN that uses directed edges in molecular graphs to better capture directional chemical bonds.
+- New model classes: `DMPNModel`, `DMPNDropoutModel`, `DMPNTwoOutputModel`
+- Supports all confidence methods: `none`, `dropout`, `mve`, `twooutput`
+- Configurable message passing direction via `--message-passing` (auto/directed/undirected)
+
+### 🎯 MD-EI Acquisition Metric (`--metric md_ei`)
+Molecular Diversity-aware Expected Improvement — combines exploitation (high predicted score) with exploration (chemical diversity) when selecting molecules.
+- `--diversity-alpha`: balance between EI and diversity (default: 0.8)
+- Uses **MaxMin selection** for batch diversity (min-distance to selected set)
+- Training-set-aware: already-explored molecules count as "selected" from the start, preventing re-sampling
+- Rank-based EI normalization prevents signal loss from long-tailed distributions
+
+### 🔬 Native Glide Docking Backend
+In addition to the original `pyscreener` backend, this fork adds a built-in **Schrödinger Glide** docking backend:
+- No external dependencies beyond a licensed Glide installation
+- Configurable via the same `objective-config` file
+- Supports `--reuse-scores-csv` to cache and reuse previously computed docking scores
+
+### 🚀 RTX 5090 / CUDA 12.4+ Compatibility
+One-command environment setup that works on modern NVIDIA GPUs (RTX 5090, etc.):
+- Installs PyTorch directly from PyPI (ships with CUDA 12.4+, compatible with driver >= 550)
+- TensorFlow-backed NN models moved to optional extras — no more broken pip installs
+- Includes a validation script to verify CUDA, GPU compute, model training, and CLI pipeline
+
+### ⏱ Enhanced Convergence Detection
+Improved early stopping mechanism:
+- `--stop-min-iterations`: minimum rounds before convergence check triggers
+- `--stop-patience`: consecutive plateau checks required before stopping
+- Plateau detection uses sliding-window comparison, not simple threshold
+
+### 📊 Performance Instrumentation
+Each iteration logs detailed timing metrics to `iteration_metrics.csv`:
+- fit_time, predict_time, acquire_time, objective_time
+- tracked metrics: top_k_avg, best_score, plateau_hit, plateau_streak
+
+### 🔧 Dependency Decoupling
+TensorFlow and PyTorch are now **optional** (`extras_require`):
+- `pip install -e '.[mpn]'` — for MPN/D-MPN models (PyTorch)
+- `pip install -e '.[nn]'` — for NN models (TensorFlow)
+- `pip install -e '.[all-models]'` — everything
+- `pip install -e .` — minimal install (RF, GP, random models only)
+
+---
+
+## Quick Start (RTX 5090 / D-MPNN)
+
+```bash
+# 1. Create environment (all dependencies included)
+conda env create -f environment_5090_dmpnn.yml
+
+# 2. Activate
+conda activate molpal_5090_dmpnn
+
+# 3. Install molpal with MPN/D-MPN support
+pip install -e '.[mpn]'
+
+# 4. Verify everything works
+python scripts/validate_5090_dmpnn.py
+```
+
+---
 
 ## Requirements
 
@@ -32,23 +80,20 @@ This repository contains the source of MolPAL, a software for the accelerated di
 _if utilizing GPU-accelerated model training and inference_
 - CUDA (>= 10.2)
 
-_if utilizing distributed GPU-accelerated model training and inference_
-- CUDA (>= 11.1)
-
 _if performing docking online_
 - the appropriate requirements as listed in the `pyscreener` [README](https://github.com/coleygroup/pyscreener)
 
 ## Installation
+
 The general steps in installing MolPAL are:
-1. cloning the repo: `git clone git@github.com:coleygroup/molpal.git`
+1. cloning the repo: `git clone git@github.com:zeadem1/molpal.git`
 1. installing the dependencies (see below)
 1. installing the repo: `pip install -e .` (note that this is typically done after dependencies are installed)
 
-The easiest way to install all dependencies is to use conda along with the supplied [environment.yml](environment.yml) file, but you may also install them manually, if desired. All libraries listed in that file are **required** before using `MolPAL`
+The easiest way to install all dependencies is to use conda along with the supplied [environment_5090_dmpnn.yml](environment_5090_dmpnn.yml) file, but you may also install them manually, if desired. All libraries listed in that file are **required** before using `MolPAL`.
 
 The following packages are _optional_ to install before running MolPAL:
 
-- cudatoolkit: whichever version matches your CUDA build if utilizing GPU acceleration for PyTorch-based models (MPN)
 - [map4](https://github.com/reymond-group/map4) and [tmap](https://github.com/reymond-group/tmap): if utilizing the map4 fingerprint
 - [optuna](https://optuna.readthedocs.io/en/stable/installation.html): if planning to perform hyperparameter optimization
 - matplotlib: to generate plots from the publication
@@ -56,25 +101,11 @@ The following packages are _optional_ to install before running MolPAL:
 
 ### setup via conda
 
-**NOTE**: the `environment.yml` must be edited to reflect your machine's setup. To do this, uncomment out the appropriate line depending on your CUDA version or if you lack a GPU entirely. If you need a lower CUDA version than those specified in the environment YAML file, comment out the PyTorch line as well and go to the [pytorch wesbite](https://pytorch.org/get-started/locally/) to set the channels and versions of both the pytorch and cudatoolkit packages properly.
-
-0. (if necessary) [install conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/)
+1. (if necessary) [install conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/)
 1. `cd /path/to/molpal`
-2. `conda env create -f environment.yml`
+1. `conda env create -f environment_5090_dmpnn.yml`
 
-Before running MolPAL, be sure to first activate the environment: `conda activate molpal`
-
-### setup for a single RTX 5090 / D-MPNN environment
-
-The repository includes a dedicated single-GPU environment for `mpn`/`dmpn` workloads on newer NVIDIA cards such as the RTX 5090 (CUDA 12.4+). This path intentionally excludes the TensorFlow-backed `nn` model so that `pip install -e .` is not blocked by TensorFlow packaging.
-
-1. `cd /path/to/molpal`
-2. `conda env create -f environment_5090_dmpnn.yml`
-3. `conda activate molpal_5090_dmpnn`
-4. `pip install -e '.[mpn]'`
-5. `python scripts/validate_5090_dmpnn.py`
-
-The validation script checks the PyTorch/CUDA build, runs a CUDA smoke test, trains a tiny `dmpn` model with `conf-method=mve`, and executes a one-iteration `molpal run` lookup job.
+Before running MolPAL, be sure to first activate the environment: `conda activate molpal_5090_dmpnn`
 
 ## Running MolPAL
 
@@ -135,13 +166,24 @@ or the full command:
 
 `molpal run --name molpal_50k --write-intermediate --write-final --retrain-from-scratch --library libraries/Enamine50k.csv.gz --validated --metric greedy --init-size 0.01 --batch-sizes 0.01 --model rf --fingerprint pair --length 2048 --radius 2 --objective lookup --objective-config examples/objective/Enamine50k_lookup.ini --top-k 0.01 --window-size 10 --delta 0.01 --max-iters 5`
 
+### New CLI Options (This Fork)
+
+| Option | Values | Default | Description |
+|--------|--------|---------|-------------|
+| `--model` | `rf`, `gp`, `nn`, `mpn`, **`dmpn`** | `rf` | **`dmpn`** — new Directed MPNN model |
+| `--metric` | ..., `ei`, `pi`, **`md_ei`** | `greedy` | **`md_ei`** — diversity-aware expected improvement |
+| `--diversity-alpha` | float [0, 1] | `0.8` | EI/diversity balance for `md_ei` |
+| `--message-passing` | `auto`, `directed`, `undirected` | `auto` | MPN/D-MPN message passing direction |
+| `--stop-min-iterations` | int | `4` | Minimum iterations before convergence check |
+| `--stop-patience` | int | `2` | Consecutive plateaus needed to stop |
+
 ### Required Settings
 
-The primary purpose of MolPAL is to accelerate virtual screens in a prospective manner. Currently (December 2020), MolPAL supports computational docking screens using the [`pyscreener`](https://github.com/coleygroup/pyscreener) library
+The primary purpose of MolPAL is to accelerate virtual screens in a prospective manner. Currently (December 2020), MolPAL supports computational docking screens using the [`pyscreener`](https://github.com/coleygroup/pyscreener) library. This fork additionally supports docking via the **Schrödinger Glide** backend.
 
 `-o` or `--objective`: The objective function you would like to use. Choices include `docking` for docking objectives and `lookup` for lookup objectives and this dictates the options that must be specified in the `objective-config` file:
 
-- `docking`: a `pyscreener`-style config file. An example may be seen [here](./examples/objective/docking.ini)
+- `docking`: a `pyscreener`-style config file (or Glide config, if using the built-in backend). An example may be seen [here](./examples/objective/docking.ini)
 - `lookup`: see any of the lookup examples in [this folder](./examples/objective/)
 
 `--libraries`: the filepaths of CSV files containing the virtual library as SMILES (or CXSMILES) strings. If CXSMILES, pass the additional `--cxsmiles` flag
@@ -157,11 +199,9 @@ MolPAL also has a number of different model architectures, encodings, acquisitio
 - `--window-size` and `--delta`: the principle stopping criterion of MolPAL is whether or not the current top-k average score is better than the moving average of the `window_size` most recent top-k average scores by at least `delta`. (Default: `window_size` = 3, `delta` = 0.1)
 - `--budget`: if you would like to limit MolPAL to exploring a fixed fraction of the libary or number of inputs, you can specify that by setting this value. (Default = 1.0)
 - `--max-iters`: Alternatively, you may specify the maximum number of iterations of exploration. (Default = 50)
-- `--model`: the type of model to use. Choices include `rf`, `gp`, `nn`, and `mpn`. (Default = `rf`)  
-
-  - `--conf-method`: the confidence estimation method to use for the NN or MPN models. Choices include `ensemble`, `dropout`, `mve`, and `none`. (Default = 'none'). NOTE: the MPN model does not support ensembling
-
-- `--metric`: the acquisition metric to use. Choices include `random`, `greedy`, `ucb`, `pi`, `ei`, `thompson`, and `threshold` (Default = `greedy`.) Some metrics include additional settings (e.g. the β value for `ucb`.)
+- `--model`: the type of model to use. Choices include `rf`, `gp`, `nn`, `mpn`, and **`dmpn`** (new!). (Default = `rf`)
+  - `--conf-method`: the confidence estimation method to use for the NN or MPN/D-MPN models. Choices include `ensemble`, `dropout`, `mve`, and `none`. (Default = 'none'). NOTE: the MPN model does not support ensembling
+- `--metric`: the acquisition metric to use. Choices include `random`, `greedy`, `ucb`, `pi`, `ei`, **`md_ei`** (new!), `thompson`, and `threshold` (Default = `greedy`.)
 
 ## Reproducing Experimental Results
 
